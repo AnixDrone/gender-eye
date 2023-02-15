@@ -2,4 +2,6 @@ data
 lightning_logs
 real_data
 .envrc
-model
+model_files*
+*/__pycache__
+*.tar.gz
