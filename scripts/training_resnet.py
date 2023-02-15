@@ -3,40 +3,17 @@ import torch.nn.functional as F
 import torch
 from torch.utils.data import Dataset, DataLoader
 import pandas as pd
-from torchvision import transforms
+from torchvision import transforms, models
 import argparse
 import os
 import logging
 import sys
 import torch.optim as optim
-import boto3
 from PIL import Image
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 logger.addHandler(logging.StreamHandler(sys.stdout))
-
-
-class Net(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.conv1 = nn.Conv2d(3, 6, 5)
-        self.pool = nn.MaxPool2d(2, 2)
-        self.conv2 = nn.Conv2d(6, 16, 5)
-        self.fc1 = nn.Linear(2304, 120)
-        self.fc2 = nn.Linear(120, 84)
-        self.fc3 = nn.Linear(84, 10)
-        self.fc4 = nn.Linear(10, 2)
-
-    def forward(self, x):
-        x = self.pool(F.relu(self.conv1(x)))
-        x = self.pool(F.relu(self.conv2(x)))
-        x = torch.flatten(x, 1)
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = F.relu(self.fc3(x))
-        x = self.fc4(x)
-        return x
 
 
 class CustomImageDataset(Dataset):
@@ -55,32 +32,21 @@ class CustomImageDataset(Dataset):
         label = self.img_labels.iloc[idx, 1]
         if self.transform:
             image = self.transform(image)
+            # custom normalization so that the mean and std are calculated on the fly and are 0 and 1 for every image
+            custom_normalize = transforms.Normalize(image.mean([1,2]), image.std([1,2]))
+            image = custom_normalize(image)
         label_idx = self.target_classes.index(label)
         return image, label_idx
 
 
-def save_model(model, model_dir):
-    logger.info("Saving the model.")
-    path = os.path.join(model_dir, 'model.pth')
-    torch.save(model.state_dict(), path)
-
-def input_fn(request_body,request_content_type):
-    ...
-
-def model_fn(model_dir):
-    model = Net()
-    model.load_state_dict(torch.load(model_dir))
-    model.eval()
-    
+def initialize_model():
+    model = models.resnet152(pretrained=True)
+    for param in model.parameters():
+        param.requires_grad = False
+    num_ftrs = model.fc.in_features
+    model.fc = nn.Linear(num_ftrs, 2)
     return model
 
-def predict_fn(input_data, model):
-    return model.predict(input_data)
-
-def output_fn(prediction, content_type):
-    res = int(prediction[0])
-    respJSON = {'Output': res}
-    return respJSON
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -113,10 +79,12 @@ if __name__ == '__main__':
     model_dir = args.model_dir
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     classes = ['female', 'male']
-
+    
     transform = transforms.Compose(
-        [transforms.Resize(60), transforms.ToTensor(), transforms.Normalize(
-            (0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]
+        [transforms.Resize(60), 
+         transforms.ToTensor(), 
+         # transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+         ]
     )
     train_dataset = CustomImageDataset(
         data_dir+'/train.csv', data_dir, classes, transform=transform)
@@ -128,8 +96,8 @@ if __name__ == '__main__':
     test_loader = DataLoader(
         test_dataset, batch_size=batch_size, shuffle=True)
 
-    net = Net().to(device)
-
+    net = initialize_model().to(device) # Net().to(device)
+    
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(net.parameters(), lr=learning_rate)
 
