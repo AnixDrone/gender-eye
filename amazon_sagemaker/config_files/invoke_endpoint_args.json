@@ -1,0 +1,8 @@
+{
+    "image_ids": [
+        0
+    ],
+    "image_paths": [
+        "s3://tomislav-ml-demo/image-data/gender-eye/usage-images/trip-to-the-mall-v0-qfyvvg40r2ia1.png"
+    ]
+}
