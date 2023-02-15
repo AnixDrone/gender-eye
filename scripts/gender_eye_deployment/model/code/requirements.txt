@@ -1,0 +1,3 @@
+Pillow==9.2.0
+boto3==1.26.20
+opencv-python==4.7.0.68

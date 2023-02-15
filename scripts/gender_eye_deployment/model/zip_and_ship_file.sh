@@ -1,0 +1,1 @@
+tar -czvf ../model.tar.gz *
